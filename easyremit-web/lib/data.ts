@@ -20,7 +20,7 @@ export const PARTNERS = [
 
 export type Offer = {
   id: string; name: string; url: string; fee: number; speed: number;
-  rate: number; net: number; channels: Channel[];
+  rate: number; net: number; channels: Channel[]; verified: boolean;
 };
 export type Receipt = {
   id: string; ts: number; partner: string; currency: string; principal: number; fee: number;
@@ -32,7 +32,7 @@ export function quote(amount: number, channel: Channel, mid: number): Offer[] {
   return PARTNERS.filter((p) => p.channels.includes(channel))
     .map((p) => {
       const rate = mid * (1 - p.margin / 100);
-      return { ...p, rate: Math.round(rate * 10000) / 10000, net: Math.round(Math.max(0, amount - p.fee) * rate) };
+      return { ...p, verified: false, rate: Math.round(rate * 10000) / 10000, net: Math.round(Math.max(0, amount - p.fee) * rate) };
     })
     .sort((a, b) => b.net - a.net);
 }
@@ -44,3 +44,14 @@ export const REWARDS = [
   { id: "voucher", name: "Zero-fee transfer voucher", cost: 500 },
 ];
 export const pointsFor = (npr: number) => Math.floor(npr / 100); // 10 points per 1,000 NPR
+
+// Demo dialing codes for sign-up (a real launch would use a full E.164 country list).
+export const DIAL = [
+  { name: "Nepal", code: "+977" }, { name: "Qatar", code: "+974" }, { name: "UAE", code: "+971" }, { name: "Saudi Arabia", code: "+966" },
+  { name: "Kuwait", code: "+965" }, { name: "Bahrain", code: "+973" }, { name: "Oman", code: "+968" }, { name: "Malaysia", code: "+60" },
+  { name: "India", code: "+91" }, { name: "Bangladesh", code: "+880" }, { name: "Sri Lanka", code: "+94" }, { name: "Pakistan", code: "+92" },
+  { name: "Singapore", code: "+65" }, { name: "Hong Kong", code: "+852" }, { name: "Japan", code: "+81" }, { name: "South Korea", code: "+82" },
+  { name: "Australia", code: "+61" }, { name: "United Kingdom", code: "+44" }, { name: "United States / Canada", code: "+1" },
+  { name: "Germany", code: "+49" }, { name: "France", code: "+33" }, { name: "Italy", code: "+39" },
+];
+export const CUR_DIAL: Record<string, string> = { QAR: "+974", AED: "+971", MYR: "+60", USD: "+1" };
