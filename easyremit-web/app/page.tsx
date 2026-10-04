@@ -2,27 +2,29 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Trophy, Zap, ShieldCheck, Clock, ExternalLink, X, Menu } from "lucide-react";
-import { CORRIDORS, CHANNELS, type Channel, type Offer, type Receipt } from "@/lib/data";
+import { CORRIDORS, CUR_DIAL, CHANNELS, type Channel, type Offer, type Receipt } from "@/lib/data";
 import Statement from "@/components/Statement";
 import Rewards from "@/components/Rewards";
 import Sahayak from "@/components/Sahayak";
 import Discover from "@/components/Discover";
+import RealityCheck from "@/components/RealityCheck";
+import AuthModal, { type User } from "@/components/AuthModal";
 
 type Lang = "en" | "ne";
-type View = "home" | "discover" | "rates" | "corridors" | "samyukta" | "points";
+type View = "home" | "discover" | "rates" | "samyukta" | "points";
 const T = {
   en: {
-    rates: "Live rates", discover: "Discover", corridors: "Corridors", samyukta: "Samyukta Remit", points: "Remit Points", login: "Log in", signup: "Sign up",
+    rates: "Live rates", discover: "Discover", corridors: "Corridors", samyukta: "Samyukta Remit", points: "Remit Points", login: "Log in", signup: "Sign up", help: "Help", signout: "Sign out",
     h1: "Maximize every rupee sent home",
     sub: "Compare rates across licensed remittance operators. See hidden markups, fees and what the recipient actually receives.",
-    cta: "Compare live rates now", select: "Go to provider", join: "Join pool", net: "Recipient receives",
+    cta: "Send money", select: "Go to provider", join: "Join pool", net: "Recipient receives",
     wallet: "Mobile wallet", cash: "Cash pickup", bank: "Bank transfer",
   },
   ne: {
-    rates: "दर तुलना", discover: "परिचय", corridors: "देशहरू", samyukta: "संयुक्त रेमिट", points: "रेमिट पोइन्ट", login: "लग इन", signup: "साइन अप",
+    rates: "दर तुलना", discover: "परिचय", corridors: "देशहरू", samyukta: "संयुक्त रेमिट", points: "रेमिट पोइन्ट", login: "लग इन", signup: "साइन अप", help: "सहायता", signout: "साइन आउट",
     h1: "घर पठाएको हरेक रुपैयाँ बढाउनुहोस्",
     sub: "इजाजतपत्र प्राप्त कम्पनीहरूको दर तुलना गर्नुहोस्। प्राप्तकर्ताले वास्तवमा कति रुपैयाँ पाउँछ हेर्नुहोस्।",
-    cta: "दर तुलना गर्नुहोस्", select: "प्रदायकमा जानुहोस्", join: "समूहमा जोडिनुहोस्", net: "प्राप्तकर्ताले पाउँछ",
+    cta: "पैसा पठाउनुहोस्", select: "प्रदायकमा जानुहोस्", join: "समूहमा जोडिनुहोस्", net: "प्राप्तकर्ताले पाउँछ",
     wallet: "मोबाइल वालेट", cash: "नगद पिकअप", bank: "बैंक ट्रान्सफर",
   },
 } as const;
@@ -32,6 +34,7 @@ const POOLS0 = [
   { id: 2, name: "Kuala Lumpur Site B Pool", target: 20, current: 7, bonus: 0.3 },
 ];
 const npr = (n: number) => n.toLocaleString("en-IN");
+const maskPhone = (p: string) => p.slice(0, -4).replace(/\d/g, "•") + p.slice(-4);
 const JSON_HEADERS = { "Content-Type": "application/json" };
 const card = "rounded-2xl border border-slate-700 bg-slate-900 p-5";
 const btn = "rounded-full bg-teal-500 px-5 py-2 font-bold text-slate-950 hover:bg-teal-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-400";
@@ -46,8 +49,9 @@ export default function Home() {
   const [offers, setOffers] = useState<Offer[]>([]);
   const [mid, setMid] = useState(0);
   const [source, setSource] = useState("demo");
-  const [phone, setPhone] = useState<string | null>(null);
-  const [authOpen, setAuthOpen] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [authOpen, setAuthOpen] = useState<null | "login" | "signup">(null);
+  const [acctOpen, setAcctOpen] = useState(false);
   const [pending, setPending] = useState<{ click_id: string; partner: string } | null>(null);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [points, setPoints] = useState(0);
@@ -76,7 +80,7 @@ export default function Home() {
     setMsg("");
     fetch("/api/referrals/click", {
       method: "POST", headers: JSON_HEADERS, keepalive: true,
-      body: JSON.stringify({ user_id: phone ?? "guest", partner_id: o.id, send_amount: parseFloat(amount), currency: cur, mid, rate: o.rate, fee: o.fee, quoted_net_npr: o.net }),
+      body: JSON.stringify({ user_id: user?.uid ?? "guest", partner_id: o.id, send_amount: parseFloat(amount), currency: cur, mid, rate: o.rate, fee: o.fee, quoted_net_npr: o.net }),
     })
       .then((r) => r.json())
       .then((d) => { if (d.click_id) { setPending({ click_id: d.click_id, partner: o.name }); setReceipt(null); } else setMsg(d.error); })
@@ -94,6 +98,7 @@ export default function Home() {
     setTimeout(() => document.getElementById("statement")?.scrollIntoView({ behavior: "smooth" }), 100);
   }
 
+  function signOut() { setUser(null); setAcctOpen(false); setPoints(0); setRedeemed([]); setReceipt(null); setPending(null); setMsg(""); go("home"); }
   function go(v: View) { setView(v); setMenuOpen(false); window.scrollTo({ top: 0 }); }
   function redeem(id: string, cost: number) { setRedeemed((r) => [...r, id]); setPoints((p) => p - cost); }
   const corridorChips = (
@@ -104,7 +109,7 @@ export default function Home() {
     </div>
   );
   const rewards = <Rewards points={points} redeemed={redeemed} onRedeem={redeem} />;
-  const menuItems: [View, string][] = [["discover", t.discover], ["rates", t.rates], ["corridors", t.corridors], ["samyukta", t.samyukta], ["points", t.points]];
+  const menuItems: [View, string][] = [["discover", t.discover], ["rates", t.rates], ["samyukta", t.samyukta], ["points", t.points]];
   const badge = "flex items-center gap-1 rounded-full bg-teal-500/15 px-2 py-1 text-teal-300";
 
   return (
@@ -128,17 +133,28 @@ export default function Home() {
             )}
           </AnimatePresence>
         </div>
-        <div className="hidden gap-6 font-semibold md:flex">
-          {menuItems.slice(1).map(([v, label]) => <button key={v} onClick={() => go(v)}>{label}</button>)}
-        </div>
-        <div className="flex items-center gap-3 text-sm font-semibold">
-          <button onClick={() => setLang(lang === "en" ? "ne" : "en")} aria-label="Toggle language">🇳🇵 EN / नेपाली</button>
-          {phone ? (
-            <span className="rounded-full border border-teal-500 px-4 py-2 text-teal-300">{phone.slice(0, 9)}… | {points} pts</span>
+        <div className="relative flex items-center gap-3 text-sm font-semibold sm:gap-4">
+          <button onClick={() => setLang(lang === "en" ? "ne" : "en")} aria-label="Toggle language" className="whitespace-nowrap">🇳🇵 {lang === "en" ? "EN" : "ने"}</button>
+          <button onClick={() => window.dispatchEvent(new Event("sahayak:open"))}>{t.help}</button>
+          {user ? (
+            <>
+              <button onClick={() => setAcctOpen(!acctOpen)} aria-label="Account menu" aria-expanded={acctOpen}
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-teal-500 font-black text-slate-950">{user.email[0].toUpperCase()}</button>
+              {acctOpen && (
+                <>
+                  <button aria-label="Close menu" className="fixed inset-0 z-30 cursor-default" onClick={() => setAcctOpen(false)} />
+                  <div className="absolute right-0 top-full z-40 mt-2 w-64 rounded-2xl border border-slate-700 bg-slate-900 p-2 shadow-xl">
+                    <div className="px-3 py-2"><p className="truncate font-bold">{user.email}</p><p className="text-xs text-slate-400">{maskPhone(user.phone)}</p></div>
+                    <button onClick={() => { go("points"); setAcctOpen(false); }} className="w-full rounded-xl px-3 py-2 text-left hover:bg-slate-800">{t.points}: {points} pts</button>
+                    <button onClick={signOut} className="w-full rounded-xl px-3 py-2 text-left font-bold text-red-300 hover:bg-slate-800">{t.signout}</button>
+                  </div>
+                </>
+              )}
+            </>
           ) : (
             <>
-              <button onClick={() => setAuthOpen(true)}>{t.login}</button>
-              <button onClick={() => setAuthOpen(true)} className={btn}>{t.signup}</button>
+              <button onClick={() => setAuthOpen("login")}>{t.login}</button>
+              <button onClick={() => setAuthOpen("signup")} className={btn}>{t.signup}</button>
             </>
           )}
         </div>
@@ -168,7 +184,7 @@ export default function Home() {
           </div>
           <p className="mt-3 text-sm text-slate-400">
             Mid-market rate: {mid ? mid.toFixed(2) : "-"} NPR per {cur} ({source === "live" ? "live" : "demo data"}).
-            Partner margins and fees are illustrative demo values, not real quotes.
+            Provider margins and fees are estimates, not live quotes. Use “Check against a real quote” below to enter the real numbers.
           </p>
           {msg && <p role="alert" className="mt-2 font-bold text-red-400">{msg}</p>}
           <ul className="mt-4 space-y-3">
@@ -182,6 +198,7 @@ export default function Home() {
                     {channel === "cash" && o.speed <= 30 && <span className={badge}><Zap size={12} /> Fast cash</span>}
                     {o.fee === 0 && <span className={badge}><ShieldCheck size={12} /> No transfer fee</span>}
                     <span className="flex items-center gap-1 rounded-full bg-slate-700 px-2 py-1"><Clock size={12} /> {o.speed} min</span>
+                    {!o.verified && <span className="rounded-full bg-amber-500/15 px-2 py-1 text-amber-300">Estimate</span>}
                   </p>
                 </div>
                 <div className="text-right">
@@ -203,19 +220,10 @@ export default function Home() {
           )}
         </div>
       </section>
+          {offers.length > 0 && <RealityCheck offers={offers} cur={cur} amount={parseFloat(amount) || 0} />}
           {receipt && <Statement r={receipt} label={t.net} />}
           {receipt && rewards}
         </>
-      )}
-      {view === "corridors" && (
-        <section id="corridors" className="mx-auto max-w-6xl px-5 pb-12">
-          <h2 className="mb-4 text-3xl font-black uppercase tracking-tight">{t.corridors}</h2>
-          <div className={card}>
-            {corridorChips}
-            <p className="mt-3 text-sm text-slate-400">Mid-market rate: {mid ? mid.toFixed(2) : "-"} NPR per {cur} ({source === "live" ? "live" : "demo data"}).</p>
-            <button onClick={() => go("rates")} className={`${btn} mt-4`}>Compare rates for {cur}</button>
-          </div>
-        </section>
       )}
       {view === "points" && rewards}
       {view === "discover" && <Discover />}
@@ -239,31 +247,11 @@ export default function Home() {
       </section>
       )}
 
-      <AnimatePresence>
-        {authOpen && (
-          <motion.div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 sm:items-center"
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setAuthOpen(false)}>
-            <motion.form role="dialog" aria-modal="true" initial={{ y: 40 }} animate={{ y: 0 }} exit={{ y: 40 }}
-              className="relative w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-6" onClick={(e) => e.stopPropagation()}
-              onSubmit={(e) => { e.preventDefault(); const f = new FormData(e.currentTarget); setPhone(String(f.get("phone"))); setLang(f.get("lang") as Lang); setAuthOpen(false); }}>
-              <button type="button" aria-label="Close" onClick={() => setAuthOpen(false)} className="absolute right-4 top-4"><X size={20} /></button>
-              <h3 className="mb-3 text-2xl font-black">{t.signup}</h3>
-              <label className="block font-bold">Phone number
-                <input name="phone" required minLength={8} placeholder="+974 5512 3456" className="mt-1 w-full rounded-xl border border-slate-600 bg-slate-800 px-3 py-2" />
-              </label>
-              <label className="mt-3 block font-bold">Language
-                <select name="lang" defaultValue={lang} className="mt-1 w-full rounded-xl border border-slate-600 bg-slate-800 px-3 py-2">
-                  <option value="en">English</option><option value="ne">नेपाली</option>
-                </select>
-              </label>
-              <p className="mt-2 text-xs text-slate-400">Demo only. No verification or SMS is sent.</p>
-              <button className={`${btn} mt-4 w-full py-3`}>Continue</button>
-            </motion.form>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <AuthModal mode={authOpen} defaultDial={CUR_DIAL[cur]} onClose={() => setAuthOpen(null)}
+        onDone={(u, l) => { setUser(u); setLang(l); setAuthOpen(null); }} />
 
-      <Sahayak offers={offers} cur={cur} mid={mid} base={receipt ? receipt.net : offers[0]?.net ?? 0} />
+      <Sahayak offers={offers} cur={cur} mid={mid} amount={parseFloat(amount) || 0} channel={channel} points={points} hasReceipt={!!receipt}
+        act={{ go: (v) => go(v as View), setCur, setAmount, setChannel }} />
     </main>
   );
 }
